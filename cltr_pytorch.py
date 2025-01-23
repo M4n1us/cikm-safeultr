@@ -47,13 +47,11 @@ os.environ["WANDB_SILENT"] = "true"
 
 wandb.login()
 if args.risk == 1:
-    wandb.init(project=args.dataset + str(args.noise) + "_risk_T=%0.2f_PBM=1.0_exp"%args.T, entity="shashankg7")
+    wandb.init(project="Experiment-Design-Ex2", entity="lena-schill-tu-wien")
 else:
-    wandb.init(project=args.dataset + str(args.noise) + "_ips_T=%0.2f_PBM=1.0_exp"%args.T, entity="shashankg7")
+    wandb.init(project="Experiment-Design-Ex2", entity="lena-schill-tu-wien")
 wandb.run.name = args.dataset + str(args.noise) + "_sessions=" + str(args.num_sessions)
 wandb.run.save()
-
-
 
 def main():
     config = yaml.safe_load(open('./config/config.yaml', 'rb'))
@@ -87,7 +85,7 @@ def main():
     meta_dir = meta_dir + str('_%d'%(args.num_sessions))
     logging_dir = os.path.join(os.path.join(root_dir_pred, args.dataset), 'logging_policy')
     click_model_type = simulation_config['clickmodel']['type']
-    device = 'cuda:0'
+    device = 'cpu' 
     dataset_fold = config['dataset']['fold']
     query_normalize = config['dataset']['normalize']
     batch_size = config['hyperparams']['batch_size']
@@ -158,6 +156,11 @@ def main():
     test_ltr_dataloader.set_label(rel_scale)
     test_dataloader = MultiEpochsDataLoader(test_ltr_dataloader, batch_size=batch_size,
                             shuffle=False, num_workers=2, persistent_workers=True)
+    
+    # Ensure the results/test_results directory exists
+    test_results_dir = './results/test_results'
+    if not os.path.exists(test_results_dir):
+        os.makedirs(test_results_dir)
     
     if args.risk == 1:
         results_file_risk = open(os.path.join('./results/test_results', args.dataset + '_' + str(args.T) + '_' + str(args.num_sessions) + '_' + str(args.job_id) + '_' + 'risk_exp'), 'w')
