@@ -3,11 +3,8 @@ logging_policy:
   deterministic: False
   T: "[1.0]"
   eps_greedy: 1.0
-  datasets: "\"['Yahoo']\""
+  datasets: '"[''Yahoo'']"'
 simulation:
   num_sessions: 25
   upper_limit: 1000000000
   repetations: 5
-
-
-    

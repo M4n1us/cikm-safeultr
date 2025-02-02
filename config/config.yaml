@@ -1,6 +1,6 @@
 dataset:
-  root_dir: "./data/"
-  predict_dir: "./logdata/"
+  root_dir: "data"
+  predict_dir: "results"
   fold: "Fold1"
   doc_feat_size: 136
   normalize: False
@@ -19,6 +19,5 @@ ranking:
   k: 5
   num_samples: 1000
   max_cand_size: 120
-  num_sessions: 100
+  num_sessions: 40000
   num_sessions_val: 10000
-    
