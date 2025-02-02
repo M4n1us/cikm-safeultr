@@ -1,6 +1,6 @@
 dataset:
-  root_dir: "<path_to/LTR_datasets>"
-  predict_dir: "<path_to/CRM_project_logs"
+  root_dir: "./data/"
+  predict_dir: "./logdata/"
   fold: "Fold1"
   doc_feat_size: 136
   normalize: False

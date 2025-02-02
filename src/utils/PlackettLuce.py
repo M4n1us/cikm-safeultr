@@ -23,6 +23,23 @@ class PlackettLuceModel:
         Custom implementation of logcumsumexp operation on ranking_scores with masking. 
         Returns document placement probability per rank, and the log-scores(for REINFORCE training)
         '''
+
+        masked_scores = ranking_scores.masked_fill(~mask, float('-inf'))
+
+        b_size, n_samp, n_docs = masked_scores.shape
+        log_score = torch.zeros(b_size, n_samp, device=masked_scores.device)
+        doc_prob_per_rank = torch.zeros_like(masked_scores)
+
+        for i in range(k):
+            s_i = masked_scores[:, :, i]
+
+            denom_i = torch.logsumexp(masked_scores[:, :, i:], dim=-1)
+            log_score_i = s_i - denom_i
+            log_score += log_score_i
+
+            doc_prob_per_rank[:, :, i] = torch.exp(log_score_i)
+        return log_score, doc_prob_per_rank
+        """
         # set log-scores to -INF at padded position
         #ranking_scores[~mask] = 0
         # log-normalizing factor for doc placement prob
@@ -43,12 +60,25 @@ class PlackettLuceModel:
         # get-log-score from top-k elements
         log_score = torch.sum(ranking_scores[:, :, :k], dim=-1) - torch.sum(log_norm[:, :, :k], dim=-1)
         return log_score, doc_prob_per_rank
+        """
 
     
-    def prob_per_rank(self, ranking_scores):
+    def prob_per_rank(self, ranking_scores, mask=None):
         '''
         Get placement prob. of document per rank.
         '''
+        if mask is not None:
+            mask_expanded = mask.unsqueeze(1).expand_as(ranking_scores)
+            ranking_scores = ranking_scores.masked_fill(~mask_expanded, float('-inf'))
+        b_size, n_samp, n_docs = ranking_scores.shape
+        doc_prob = torch.zeros_like(ranking_scores)
+
+        for i in range(n_docs):
+            denom_i = torch.logsumexp(ranking_scores[:, :, i:], dim=-1, keepdim=True)
+            doc_prob[:, :, i] = torch.exp(ranking_scores[:, :, i] - denom_i)
+
+        return doc_prob
+        """
         log_norm = torch.flip(torch.logcumsumexp(torch.flip(ranking_scores, [2]), -1), [2])
         # exponentiating log_norm to get the 'true' normalizing factor
         #norm = torch.exp(log_norm)
@@ -60,6 +90,7 @@ class PlackettLuceModel:
         #doc_prob_per_rank = torch.exp(ranking_scores - log_norm)
         doc_prob_per_rank = normalized_scores
         return doc_prob_per_rank
+        """
 
         
     def sample(self, logits, mask, T=1):
@@ -76,12 +107,18 @@ class PlackettLuceModel:
         # T = temperature. T < 1 makes the sampling more deterministic, T > 1 makes it more uniform. 
         logits = logits/T
         self.size = logits.shape
-        logits = logits.unsqueeze(1).expand(self.size[0], self.n_samples, self.size[1])
-        unif = torch.rand_like(logits)
-        gumbel_scores = logits - torch.log(-torch.log(unif + self.eps ) )
-        # Masking out the padded gumbel scores. 
-        # -log(-log(u)) can increase the score of padded docs, so masking them is required.  
-        gumbel_scores = gumbel_scores * mask.unsqueeze(1)
+        batch_size, n_docs = logits.shape
+        logits_expanded = logits.unsqueeze(1).expand(batch_size, self.n_samples, n_docs)
+        unif = torch.rand_like(logits_expanded)
+        unif = torch.clamp(unif, min=1e-8, max=1 - 1e-8) 
+        gumbel_noise = -torch.log(-torch.log(unif + self.eps))
+
+        gumbel_scores = logits_expanded + gumbel_noise
+        gumbel_scores = torch.clamp(gumbel_scores, -1e6, 1e6)
+
+        mask_expanded = mask.unsqueeze(1).expand_as(gumbel_scores)
+        gumbel_scores = gumbel_scores.masked_fill(~mask_expanded, float('-inf'))
+
         #gumbel_scores = gumbel_scores + (~mask.unsqueeze(1)) * -torch.tensor(1000000)
         ranking_scores, sampled_rankings = torch.sort(gumbel_scores, descending=True, dim=-1, stable=True)
         return (ranking_scores, sampled_rankings)
@@ -92,6 +129,7 @@ class PlackettLuceModel:
             computes log-score given samples    
             output size: #queriesInBatch
         '''
-        mask1 = mask.unsqueeze(1).expand(mask.shape[0], self.n_samples, mask.shape[1])
-        log_score, doc_prob_per_rank = self.__reverse_logcumsumexp(ranking_scores, mask1, k)
+        mask_expanded = mask.unsqueeze(1).expand_as(ranking_scores)
+        #mask1 = mask.unsqueeze(1).expand(mask.shape[0], self.n_samples, mask.shape[1])
+        log_score, doc_prob_per_rank = self.__reverse_logcumsumexp(ranking_scores, mask_expanded, k)
         return log_score, doc_prob_per_rank        
